@@ -3,34 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My GitHub Page</title>
+    <title>行列簡約化の練習</title>
     <link rel="stylesheet" href="./index.css">
+
+    <!-- math.js 最新版 v15.1.1 -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@15.1.1/lib/browser/math.min.js"></script>
+
+    <!-- MathJax v3 -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        input[type="text"] { width: 60px; text-align: center; }
+        table { border-collapse: collapse; margin-top: 10px; }
+        td { padding: 4px; }
+        #latex-output { margin-top: 20px; font-size: 1.3em; }
+    </style>
 </head>
+
 <body>
 
-    <header>
-        <h1>Welcome to My Page</h1>
-        <p>GitHub Pages を使ったシンプルなサイトです</p>
-    </header>
+<h2>行列の簡約化を練習しよう</h2>
 
-    <main>
-        <section id="about">
-            <h2>About</h2>
-            <p>ここに自己紹介やサイトの目的を記述します。ミニマルなデザインなので、カスタマイズも簡単です。</p>
-        </section>
+<label>行数 m: <input type="number" id="rows" min="1" max="10" value="3"></label>
+<label>列数 n: <input type="number" id="cols" min="1" max="10" value="3"></label>
+<button id="generate">入力欄を生成</button>
 
-        <section id="links">
-            <h2>Links</h2>
-            <ul>
-                <li><a href="https://github.com/">GitHub Profile</a></li>
-                <li><a href="#">Other Project</a></li>
-            </ul>
-        </section>
-    </main>
+<div id="matrix-container"></div>
 
-    <footer>
-        <p>&copy; 2026 My Name</p>
-    </footer>
+<button id="readMatrix">入力値を読み取って表示</button>
+
+<div id="latex-output"></div>
+
+<script>
+//============================================
+// 0 で割る式が含まれているか AST で検出
+//============================================
+function containsDivisionByZero(ast) {
+    let flag = false;
+    ast.traverse(node => {
+        if (node.isOperatorNode && node.op === "/") {
+            const rhs = node.args[1].evaluate();
+            if (rhs === 0) flag = true;
+        }
+    });
+    return flag;
+}
+
+//============================================
+// Fraction → LaTeX
+// ・整数なら整数（2/1 → 2）
+// ・分数は \frac{n}{d}
+//============================================
+function toLatex(x) {
+    // Fraction 型かどうか
+    if (x && typeof x === "object" && "n" in x && "d" in x) {
+
+        // ★ 0 は無条件に 0 と表示
+        if (Number(x.n) === 0) return "0";
+
+        // ★ 分母が 1 なら整数
+        if (Number(x.d) === 1) return String(Number(x.n));
+
+        // ★ 分母が 1 でない場合は分数
+        return `\\frac{${Number(x.n)}}{${Number(x.d)}}`;
+    }
+
+    // Fraction 以外（通常の number など）は普通に表示
+    return String(x);
+}
+
+
+//============================================
+// 入力欄生成
+//============================================
+document.getElementById("generate").addEventListener("click", () => {
+    const m = Number(document.getElementById("rows").value);
+    const n = Number(document.getElementById("cols").value);
+
+    const container = document.getElementById("matrix-container");
+    container.innerHTML = "";
+
+    const table = document.createElement("table");
+
+    for (let i = 0; i < m; i++) {
+        const tr = document.createElement("tr");
+        for (let j = 0; j < n; j++) {
+            const td = document.createElement("td");
+            const inp = document.createElement("input");
+            inp.type = "text";
+            inp.placeholder = `${i+1},${j+1}`;
+            td.appendChild(inp);
+            tr.appendChild(td);
+        }
+        table.appendChild(tr);
+    }
+
+    container.appendChild(table);
+});
+
+//============================================
+// 行列読み取り → MathJax で表示
+//============================================
+document.getElementById("readMatrix").addEventListener("click", () => {
+    const container = document.getElementById("matrix-container");
+    const rows = container.getElementsByTagName("tr");
+
+    if (rows.length === 0) {
+        alert("行列が生成されていません。");
+        return;
+    }
+
+    const matrix = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const inputs = rows[i].getElementsByTagName("input");
+        const rowData = [];
+
+        for (let j = 0; j < inputs.length; j++) {
+            let val = inputs[j].value.trim();
+            if (!val) val = "0";  // 空欄は 0
+
+            // ---- パース（構文解析） ----
+            let ast;
+            try {
+                ast = math.parse(val);
+            } catch {
+                alert(`(${i+1}, ${j+1}) の入力が無効です（構文エラー）: "${val}"`);
+                return;
+            }
+
+            // ---- 0 で割っていないかチェック ----
+            if (containsDivisionByZero(ast)) {
+                alert(`(${i+1}, ${j+1}) の入力が 0 で割っています: "${val}"`);
+                return;
+            }
+
+            // ---- 評価 ----
+            let evaluated;
+            try {
+                evaluated = ast.evaluate();
+            } catch {
+                alert(`(${i+1}, ${j+1}) の入力が無効です（評価エラー）: "${val}"`);
+                return;
+            }
+
+            // ---- Fraction 化 ----
+            let frac;
+            try {
+                frac = math.fraction(evaluated);
+            } catch {
+                alert(`(${i+1}, ${j+1}) の値を分数に変換できません: "${val}"`);
+                return;
+            }
+
+            rowData.push(frac);
+        }
+
+        matrix.push(rowData);
+    }
+
+    //============================================
+    // 行列 → LaTeX 変換（pmatrix）
+    //============================================
+    let latex = "\\[ \\begin{pmatrix}";
+    latex += matrix
+        .map(row => row.map(x => toLatex(x)).join(" & "))
+        .join(" \\\\ ");
+    latex += "\\end{pmatrix} \\]";
+
+    document.getElementById("latex-output").innerHTML = latex;
+
+    MathJax.typesetPromise();
+});
+</script>
 
 </body>
 </html>
