@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>行列簡約化の練習</title>
-    <link rel="stylesheet" href="./index.css">
 
     <!-- math.js 最新版 v15.1.1 -->
     <script src="https://cdn.jsdelivr.net/npm/mathjs@15.1.1/lib/browser/math.min.js"></script>
@@ -23,10 +22,9 @@
         input[type="text"] { width: 60px; text-align: center; }
         table { border-collapse: collapse; margin-top: 10px; }
         td { padding: 4px; }
-        #latex-output { margin-top: 20px; font-size: 1.3em; }
+        #latex-output { margin-top: 20px; font-size: 1.3em; text-align: center;}
     </style>
 </head>
-
 <body>
 
 <h2>行列の簡約化を練習しよう</h2>
@@ -42,6 +40,9 @@
 <div id="latex-output"></div>
 
 <script>
+// math.js の内部計算をすべて「分数（Fraction）」に統一する（超重要）
+math.config({ number: 'Fraction' });
+
 //============================================
 // 0 で割る式が含まれているか AST で検出
 //============================================
@@ -50,38 +51,41 @@ function containsDivisionByZero(ast) {
     ast.traverse(node => {
         if (node.isOperatorNode && node.op === "/") {
             const rhs = node.args[1].evaluate();
-            if (rhs === 0) flag = true;
+            // math.equal を使い、Fractionオブジェクト同士でも安全に0判定を行う
+            if (math.equal(rhs, 0)) flag = true;
         }
     });
     return flag;
 }
 
 //============================================
-// Fraction → LaTeX
-// ・整数なら整数（2/1 → 2）
-// ・分数は \frac{n}{d}
+// Fractionオブジェクトを完璧に LaTeX に変換する関数
 //============================================
 function toLatex(x) {
-    // Fraction 型かどうか
+    // 確実に Fraction オブジェクトであることを確認
     if (x && typeof x === "object" && "n" in x && "d" in x) {
-
-        // ★ 0 は無条件に 0 と表示
+        
+        // 1. 分子が 0 なら無条件で "0"
         if (Number(x.n) === 0) return "0";
 
-        // ★ 分母が 1 なら整数
-        if (Number(x.d) === 1) return String(Number(x.n));
+        // 2. 符号の判定（x.s が -1 ならマイナス、それ以外は空文字）
+        const sign = x.s === -1 ? "-" : "";
 
-        // ★ 分母が 1 でない場合は分数
-        return `\\frac{${Number(x.n)}}{${Number(x.d)}}`;
+        // 3. 分母が 1 なら整数として出力
+        if (Number(x.d) === 1) {
+            return  sign + String(Number(x.n));
+        }
+
+        // 4. 分母が 1 以外なら分数として出力
+        return `${sign}\\frac{${Number(x.n)}}{${Number(x.d)}}`;
     }
 
-    // Fraction 以外（通常の number など）は普通に表示
+    // 万が一、ただの数値や文字列だった場合のフォールバック
     return String(x);
 }
 
-
 //============================================
-// 入力欄生成
+// [ボタンイベント] 入力欄（テーブル）を生成
 //============================================
 document.getElementById("generate").addEventListener("click", () => {
     const m = Number(document.getElementById("rows").value);
@@ -109,7 +113,7 @@ document.getElementById("generate").addEventListener("click", () => {
 });
 
 //============================================
-// 行列読み取り → MathJax で表示
+// [ボタンイベント] 行列を読み取って MathJax 表示
 //============================================
 document.getElementById("readMatrix").addEventListener("click", () => {
     const container = document.getElementById("matrix-container");
@@ -128,38 +132,40 @@ document.getElementById("readMatrix").addEventListener("click", () => {
 
         for (let j = 0; j < inputs.length; j++) {
             let val = inputs[j].value.trim();
-            if (!val) val = "0";  // 空欄は 0
+            if (!val) val = "0";  // 空欄なら "0" として扱う
 
-            // ---- パース（構文解析） ----
+            // ---- 1. 構文解析（パース） ----
             let ast;
             try {
                 ast = math.parse(val);
             } catch {
-                alert(`(${i+1}, ${j+1}) の入力が無効です（構文エラー）: "${val}"`);
+                alert(`(${i+1}, ${j+1}) の入力に構文エラーがあります: "${val}"`);
                 return;
             }
 
-            // ---- 0 で割っていないかチェック ----
+            // ---- 2. 0でのゼロ除算チェック ----
             if (containsDivisionByZero(ast)) {
-                alert(`(${i+1}, ${j+1}) の入力が 0 で割っています: "${val}"`);
+                alert(`(${i+1}, ${j+1}) の入力で 0 で割る計算が行われています: "${val}"`);
                 return;
             }
 
-            // ---- 評価 ----
+            // ---- 3. 式の評価（計算） ----
             let evaluated;
             try {
                 evaluated = ast.evaluate();
             } catch {
-                alert(`(${i+1}, ${j+1}) の入力が無効です（評価エラー）: "${val}"`);
+                alert(`(${i+1}, ${j+1}) の式を計算できません: "${val}"`);
                 return;
             }
 
-            // ---- Fraction 化 ----
+            // ---- 4. Fraction（分数）型への完全な変換 ----
             let frac;
             try {
+                // math.configでFractionに統一しているため、
+                // 文字列から直接 fraction を生成するのが最も符号（s）を壊さない安全な方法です
                 frac = math.fraction(evaluated);
             } catch {
-                alert(`(${i+1}, ${j+1}) の値を分数に変換できません: "${val}"`);
+                alert(`(${i+1}, ${j+1}) の値を分数オブジェクトに変換できませんでした: "${val}"`);
                 return;
             }
 
@@ -167,21 +173,27 @@ document.getElementById("readMatrix").addEventListener("click", () => {
         }
 
         matrix.push(rowData);
+
     }
 
     //============================================
-    // 行列 → LaTeX 変換（pmatrix）
+    // 5. 行列の二次元配列を LaTeX（pmatrix）に変換
     //============================================
-    let latex = "\\[ \\begin{pmatrix}";
+    let latex = "$ \\begin{pmatrix}";
     latex += matrix
         .map(row => row.map(x => toLatex(x)).join(" & "))
         .join(" \\\\ ");
-    latex += "\\end{pmatrix} \\]";
+    latex += "\\end{pmatrix} $";
 
+    // 画面に出力
     document.getElementById("latex-output").innerHTML = latex;
 
+    // MathJaxに再描画させる
     MathJax.typesetPromise();
 });
+
+
+
 </script>
 
 </body>
