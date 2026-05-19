@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>行列簡約化の練習</title>
 
+    <link ref="stylesheet" href="./index.css">
+
     <!-- math.js 最新版 v15.1.1 -->
     <script src="https://cdn.jsdelivr.net/npm/mathjs@15.1.1/lib/browser/math.min.js"></script>
 
@@ -17,13 +19,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
-    <style>
-        body { font-family: sans-serif; margin: 20px; }
-        input[type="text"] { width: 60px; text-align: center; }
-        table { border-collapse: collapse; margin-top: 10px; }
-        td { padding: 4px; }
-        #latex-output { margin-top: 20px; font-size: 1.3em; text-align: center;}
-    </style>
+    
 </head>
 <body>
 
@@ -35,9 +31,9 @@
 
 <div id="matrix-container"></div>
 
-<button id="readMatrix">入力値を読み取って表示</button>
+<button style="margin-top: 2em;" id="readMatrix">入力値を読み取って表示</button>
 
-<div id="latex-output"></div>
+<div style="margin-top: 2em;" id="latex-output"></div>
 
 <script>
 // math.js の内部計算をすべて「分数（Fraction）」に統一する（超重要）
@@ -63,18 +59,18 @@ function containsDivisionByZero(ast) {
 //============================================
 function toLatex(x) {
     // 確実に Fraction オブジェクトであることを確認
-    if (x && typeof x === "object" && "n" in x && "d" in x) {
+    if (x && typeof x === "object" && "s" in x && "n" in x && "d" in x) {
         
         // 1. 分子が 0 なら無条件で "0"
         if (Number(x.n) === 0) return "0";
 
         // 2. 符号の判定（x.s が -1 ならマイナス、それ以外は空文字）
-        const sign = x.s === -1 ? "-" : "";
+        const sign = Number(x.s) === -1 ? "-" : "";
 
         // 3. 分母が 1 なら整数として出力
         if (Number(x.d) === 1) {
             return  sign + String(Number(x.n));
-        }
+        }   
 
         // 4. 分母が 1 以外なら分数として出力
         return `${sign}\\frac{${Number(x.n)}}{${Number(x.d)}}`;
@@ -143,7 +139,7 @@ document.getElementById("readMatrix").addEventListener("click", () => {
                 return;
             }
 
-            // ---- 2. 0でのゼロ除算チェック ----
+            // ---- 2. ゼロ除算チェック ----
             if (containsDivisionByZero(ast)) {
                 alert(`(${i+1}, ${j+1}) の入力で 0 で割る計算が行われています: "${val}"`);
                 return;
@@ -177,13 +173,13 @@ document.getElementById("readMatrix").addEventListener("click", () => {
     }
 
     //============================================
-    // 5. 行列の二次元配列を LaTeX（pmatrix）に変換
+    // 5. 行列の二次元配列を LaTeX（bmatrix）に変換
     //============================================
-    let latex = "$ \\begin{pmatrix}";
+    let latex = "$\\begin{bmatrix}";
     latex += matrix
         .map(row => row.map(x => toLatex(x)).join(" & "))
         .join(" \\\\ ");
-    latex += "\\end{pmatrix} $";
+    latex += "\\end{bmatrix} $";
 
     // 画面に出力
     document.getElementById("latex-output").innerHTML = latex;
