@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,178 +20,349 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
-    
+
 </head>
+
 <body>
 
-<h2>行列の簡約化を練習しよう</h2>
+    <h2>行列の簡約化を練習しよう</h2>
 
-<label>行数 m: <input type="number" id="rows" min="1" max="10" value="3"></label>
-<label>列数 n: <input type="number" id="cols" min="1" max="10" value="3"></label>
-<button id="generate">入力欄を生成</button>
+    <label>行数 m:
+        <select id="rows">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+        </select>
+    </label>
 
-<div id="matrix-container"></div>
+    <label>列数 n:
+        <select id="cols">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+        </select>
+    </label>
+    <button id="generate">入力欄を生成</button>
 
-<button style="margin-top: 2em;" id="readMatrix">入力値を読み取って表示</button>
+    <div id="matrix-container"></div>
 
-<div style="margin-top: 2em;" id="latex-output"></div>
+    <button style="margin-top: 2em;" id="readMatrix">入力値を読み取って表示</button>
 
-<script>
-// math.js の内部計算をすべて「分数（Fraction）」に統一する（超重要）
-math.config({ number: 'Fraction' });
+    <div style="margin-top: 2em;" id="latex-output"></div>
 
-//============================================
-// 0 で割る式が含まれているか AST で検出
-//============================================
-function containsDivisionByZero(ast) {
-    let flag = false;
-    ast.traverse(node => {
-        if (node.isOperatorNode && node.op === "/") {
-            const rhs = node.args[1].evaluate();
-            // math.equal を使い、Fractionオブジェクト同士でも安全に0判定を行う
-            if (math.equal(rhs, 0)) flag = true;
-        }
-    });
-    return flag;
-}
+    <div id="operation-container" style="margin-top: 1.5em; display: none;">
 
-//============================================
-// Fractionオブジェクトを完璧に LaTeX に変換する関数
-//============================================
-function toLatex(x) {
-    // 確実に Fraction オブジェクトであることを確認
-    if (x && typeof x === "object" && "s" in x && "n" in x && "d" in x) {
-        
-        // 1. 分子が 0 なら無条件で "0"
-        if (Number(x.n) === 0) return "0";
 
-        // 2. 符号の判定（x.s が -1 ならマイナス、それ以外は空文字）
-        const sign = Number(x.s) === -1 ? "-" : "";
+        <h3>行う行基本変形を選択してください：</h3>
 
-        // 3. 分母が 1 なら整数として出力
-        if (Number(x.d) === 1) {
-            return  sign + String(Number(x.n));
-        }   
+        <div style="margin-bottom: 0.8em;">
+            <label>
+                <input type="radio" name="row-op" value="scale">
+                (1) <select class="row-select" id="scale-i"></select> 行を
+                <input type="text" id="scale-c" style="width:50px; text-align:center;" placeholder="c"> 倍する
+            </label>
+        </div>
 
-        // 4. 分母が 1 以外なら分数として出力
-        return `${sign}\\frac{${Number(x.n)}}{${Number(x.d)}}`;
-    }
+        <div style="margin-bottom: 0.8em;">
+            <label>
+                <input type="radio" name="row-op" value="swap">
+                (2) <select class="row-select" id="swap-i"></select> 行と
+                <select class="row-select" id="swap-j"></select> 行を入れ替える
+            </label>
+        </div>
 
-    // 万が一、ただの数値や文字列だった場合のフォールバック
-    return String(x);
-}
+        <div style="margin-bottom: 0.8em;">
+            <label>
+                <input type="radio" name="row-op" value="add">
+                (3) <select class="row-select" id="add-i"></select> 行に
+                <select class="row-select" id="add-j"></select> 行の
+                <input type="text" id="add-c" style="width:50px; text-align:center;" placeholder="c"> 倍を加える
+            </label>
+        </div>
 
-//============================================
-// [ボタンイベント] 入力欄（テーブル）を生成
-//============================================
-document.getElementById("generate").addEventListener("click", () => {
-    const m = Number(document.getElementById("rows").value);
-    const n = Number(document.getElementById("cols").value);
+        <div style="margin-top: 1em;">
+            <button id="execute" style="padding: 5px 20px; font-size: 1em; cursor: pointer;">実行</button>
+        </div>
 
-    const container = document.getElementById("matrix-container");
-    container.innerHTML = "";
+    </div>
 
-    const table = document.createElement("table");
+    <script>
+        // math.js の内部計算をすべて「分数（Fraction）」に統一する（超重要）
+        math.config({ number: 'Fraction' });
 
-    for (let i = 0; i < m; i++) {
-        const tr = document.createElement("tr");
-        for (let j = 0; j < n; j++) {
-            const td = document.createElement("td");
-            const inp = document.createElement("input");
-            inp.type = "text";
-            inp.placeholder = `${i+1},${j+1}`;
-            td.appendChild(inp);
-            tr.appendChild(td);
-        }
-        table.appendChild(tr);
-    }
+        let matrix = [];
 
-    container.appendChild(table);
-});
-
-//============================================
-// [ボタンイベント] 行列を読み取って MathJax 表示
-//============================================
-document.getElementById("readMatrix").addEventListener("click", () => {
-    const container = document.getElementById("matrix-container");
-    const rows = container.getElementsByTagName("tr");
-
-    if (rows.length === 0) {
-        alert("行列が生成されていません。");
-        return;
-    }
-
-    const matrix = [];
-
-    for (let i = 0; i < rows.length; i++) {
-        const inputs = rows[i].getElementsByTagName("input");
-        const rowData = [];
-
-        for (let j = 0; j < inputs.length; j++) {
-            let val = inputs[j].value.trim();
-            if (!val) val = "0";  // 空欄なら "0" として扱う
-
-            // ---- 1. 構文解析（パース） ----
-            let ast;
-            try {
-                ast = math.parse(val);
-            } catch {
-                alert(`(${i+1}, ${j+1}) の入力に構文エラーがあります: "${val}"`);
-                return;
-            }
-
-            // ---- 2. ゼロ除算チェック ----
-            if (containsDivisionByZero(ast)) {
-                alert(`(${i+1}, ${j+1}) の入力で 0 で割る計算が行われています: "${val}"`);
-                return;
-            }
-
-            // ---- 3. 式の評価（計算） ----
-            let evaluated;
-            try {
-                evaluated = ast.evaluate();
-            } catch {
-                alert(`(${i+1}, ${j+1}) の式を計算できません: "${val}"`);
-                return;
-            }
-
-            // ---- 4. Fraction（分数）型への完全な変換 ----
-            let frac;
-            try {
-                // math.configでFractionに統一しているため、
-                // 文字列から直接 fraction を生成するのが最も符号（s）を壊さない安全な方法です
-                frac = math.fraction(evaluated);
-            } catch {
-                alert(`(${i+1}, ${j+1}) の値を分数オブジェクトに変換できませんでした: "${val}"`);
-                return;
-            }
-
-            rowData.push(frac);
+        //============================================
+        // 0 で割る式が含まれているか AST で検出
+        //============================================
+        function containsDivisionByZero(ast) {
+            let flag = false;
+            ast.traverse(node => {
+                if (node.isOperatorNode && node.op === "/") {
+                    const rhs = node.args[1].evaluate();
+                    // math.equal を使い、Fractionオブジェクト同士でも安全に0判定を行う
+                    if (math.equal(rhs, 0)) flag = true;
+                }
+            });
+            return flag;
         }
 
-        matrix.push(rowData);
+        //============================================
+        // Fractionオブジェクトを完璧に LaTeX に変換する関数
+        //============================================
+        function toLatex(x) {
+            // 確実に Fraction オブジェクトであることを確認
+            if (x && typeof x === "object" && "s" in x && "n" in x && "d" in x) {
 
-    }
+                // 1. 分子が 0 なら無条件で "0"
+                if (Number(x.n) === 0) return "0";
 
-    //============================================
-    // 5. 行列の二次元配列を LaTeX（bmatrix）に変換
-    //============================================
-    let latex = "$\\begin{bmatrix}";
-    latex += matrix
-        .map(row => row.map(x => toLatex(x)).join(" & "))
-        .join(" \\\\ ");
-    latex += "\\end{bmatrix} $";
+                // 2. 符号の判定（x.s が -1 ならマイナス、それ以外は空文字）
+                const sign = Number(x.s) === -1 ? "-" : "";
 
-    // 画面に出力
-    document.getElementById("latex-output").innerHTML = latex;
+                // 3. 分母が 1 なら整数として出力
+                if (Number(x.d) === 1) {
+                    return sign + String(Number(x.n));
+                }
 
-    // MathJaxに再描画させる
-    MathJax.typesetPromise();
-});
+                // 4. 分母が 1 以外なら分数として出力
+                return `${sign}\\frac{${Number(x.n)}}{${Number(x.d)}}`;
+            }
 
+            // 万が一、ただの数値や文字列だった場合のフォールバック
+            return String(x);
+        }
 
+        //============================================
+        // [ボタンイベント] 入力欄（テーブル）を生成
+        //============================================
+        document.getElementById("generate").addEventListener("click", () => {
+            // ★これを追加：新しく入力欄を作るときは、変形選択エリアを非表示（リセット）にする
+            const opContainer = document.getElementById("operation-container");
+            if (opContainer) {
+                opContainer.style.display = "none";
 
-</script>
+                // （おまけ）もしラジオボタンのチェック状態も完全に初期化したい場合は以下を有効にしてください
+                document.querySelectorAll('input[name="row-op"]').forEach(r => r.checked = false);
+            }
+
+            // 念のため、前に表示していたLaTeX行列の出力エリアも空っぽにしておくとより綺麗です
+            const latexOutput = document.getElementById("latex-output");
+            if (latexOutput) latexOutput.innerHTML = "";
+
+            const m = Number(document.getElementById("rows").value);
+            const n = Number(document.getElementById("cols").value);
+
+            const container = document.getElementById("matrix-container");
+            container.innerHTML = "";
+
+            const table = document.createElement("table");
+
+            for (let i = 0; i < m; i++) {
+                const tr = document.createElement("tr");
+                for (let j = 0; j < n; j++) {
+                    const td = document.createElement("td");
+                    const inp = document.createElement("input");
+                    inp.type = "text";
+                    inp.placeholder = `${i + 1},${j + 1}`;
+                    td.appendChild(inp);
+                    tr.appendChild(td);
+                }
+                table.appendChild(tr);
+            }
+
+            container.appendChild(table);
+        });
+
+        //============================================
+        // [ボタンイベント] 行列を読み取って MathJax 表示
+        //============================================
+        document.getElementById("readMatrix").addEventListener("click", () => {
+            const container = document.getElementById("matrix-container");
+            const rows = container.getElementsByTagName("tr");
+
+            if (rows.length === 0) {
+                alert("行列が生成されていません。");
+                return;
+            }
+
+            matrix = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                const inputs = rows[i].getElementsByTagName("input");
+                const rowData = [];
+
+                for (let j = 0; j < inputs.length; j++) {
+                    let val = inputs[j].value.trim();
+                    if (!val) val = "0";  // 空欄なら "0" として扱う
+
+                    // ---- 1. 構文解析（パース） ----
+                    let ast;
+                    try {
+                        ast = math.parse(val);
+                    } catch {
+                        alert(`(${i + 1}, ${j + 1}) の入力に構文エラーがあります: "${val}"`);
+                        return;
+                    }
+
+                    // ---- 2. ゼロ除算チェック ----
+                    if (containsDivisionByZero(ast)) {
+                        alert(`(${i + 1}, ${j + 1}) の入力で 0 で割る計算が行われています: "${val}"`);
+                        return;
+                    }
+
+                    // ---- 3. 式の評価（計算） ----
+                    let evaluated;
+                    try {
+                        evaluated = ast.evaluate();
+                    } catch {
+                        alert(`(${i + 1}, ${j + 1}) の式を計算できません: "${val}"`);
+                        return;
+                    }
+
+                    // ---- 4. Fraction（分数）型への完全な変換 ----
+                    let frac;
+                    try {
+                        // math.configでFractionに統一しているため、
+                        // 文字列から直接 fraction を生成するのが最も符号（s）を壊さない安全な方法です
+                        frac = math.fraction(evaluated);
+                    } catch {
+                        alert(`(${i + 1}, ${j + 1}) の値を分数オブジェクトに変換できませんでした: "${val}"`);
+                        return;
+                    }
+
+                    rowData.push(frac);
+                }
+
+                matrix.push(rowData);
+
+            }
+
+            //============================================
+            // 5. 行列の二次元配列を LaTeX（bmatrix）に変換
+            //============================================
+            let latex = "$\\begin{bmatrix}";
+            latex += matrix
+                .map(row => row.map(x => toLatex(x)).join(" & "))
+                .join(" \\\\ ");
+            latex += "\\end{bmatrix} $";
+
+            // 画面に出力
+            document.getElementById("latex-output").innerHTML = latex;
+
+            // MathJaxに再描画させる
+            MathJax.typesetPromise();
+
+            // 非表示にしていた変形選択エリアをバシッと表示させる
+            document.getElementById("operation-container").style.display = "block";
+
+            // セレクトボックス(i, j) の選択肢を 1 から m まで自動生成する
+            const selectElements = document.querySelectorAll(".row-select");
+            selectElements.forEach(select => {
+                select.innerHTML = ""; // 前の選択肢を一度クリア
+                for (let k = 1; k <= matrix.length; k++) { // matrix.length が 行数 m です
+                    const opt = document.createElement("option");
+                    opt.value = k; // プログラム側で扱う値
+                    opt.textContent = k; // 画面に表示される文字 (1, 2, 3...)
+                    select.appendChild(opt);
+                }
+            });
+        });
+
+        //============================================
+        // [ボタンイベント] 選ばれた行基本変形を実行する
+        //============================================
+        document.getElementById("execute").addEventListener("click", () => {
+            const selectedOp = document.querySelector('input[name="row-op"]:checked');
+            if (!selectedOp) {
+                alert("行う操作を選択してください。");
+                return;
+            }
+
+            const opType = selectedOp.value;
+
+            try {
+                if (opType === "scale") {
+                    // (1) i行を c倍する
+                    const i = Number(document.getElementById("scale-i").value) - 1;
+                    const c_val = document.getElementById("scale-c").value.trim();
+                    if (!c_val) { alert("cの値を入力してください。"); return; }
+
+                    // 安全にFraction型として取得
+                    const c = math.fraction(math.evaluate(c_val));
+
+                    // 各成分を掛け算
+                    matrix[i] = matrix[i].map(x => math.multiply(x, c));
+
+                } else if (opType === "swap") {
+                    // (2) i行と j行を入れ替える
+                    const i = Number(document.getElementById("swap-i").value) - 1;
+                    const j = Number(document.getElementById("swap-j").value) - 1;
+
+                    [matrix[i], matrix[j]] = [matrix[j], matrix[i]];
+
+                } else if (opType === "add") {
+                    // (3) i行に j行の c倍を加える
+                    const i = Number(document.getElementById("add-i").value) - 1;
+                    const j = Number(document.getElementById("add-j").value) - 1;
+                    const c_val = document.getElementById("add-c").value.trim();
+                    if (!c_val) { alert("cの値を入力してください。"); return; }
+
+                    const c = math.fraction(math.evaluate(c_val));
+
+                    matrix[i] = matrix[i].map((x, colIdx) => {
+                        const product = math.multiply(c, matrix[j][colIdx]);
+                        return math.add(x, product);
+                    });
+                }
+
+                // --- 結果を表示 ---
+                updateLatexDisplay();
+
+            } catch (e) {
+                alert("計算に失敗しました。c の入力値などが正しいか確認してください。");
+                console.error("エラーの生データ:", e); // 原因究明のために詳細をログに残す
+            }
+        });
+
+        //============================================
+        // LaTeX表示を更新する共通関数（安全版）
+        //============================================
+        function updateLatexDisplay() {
+            let latex = "$\\begin{bmatrix}";
+            latex += matrix
+                .map(row => row.map(x => {
+                    if (x && typeof x === "object" && "n" in x && "d" in x) {
+                        if (Number(x.n) === 0) return "0";
+                        const sign = Number(x.s) === -1 ? "-" : ""; // ★ここを確実に安全化
+                        if (Number(x.d) === 1) return sign + String(Number(x.n));
+                        return `${sign}\\frac{${Number(x.n)}}{${Number(x.d)}}`;
+                    }
+                    return String(x);
+                }).join(" & "))
+                .join(" \\\\ ");
+            latex += "\\end{bmatrix} $";
+
+            document.getElementById("latex-output").innerHTML = latex;
+            MathJax.typesetPromise();
+        }
+
+    </script>
 
 </body>
+
 </html>
